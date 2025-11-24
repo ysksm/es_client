@@ -89,3 +89,102 @@ pub struct VersionInfo {
     pub build_flavor: String,
     pub build_type: String,
 }
+
+/// Sample index configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SampleIndexConfig {
+    pub name: String,
+    pub description: String,
+    pub index_name: String,
+    pub mappings: serde_json::Value,
+    pub settings: serde_json::Value,
+}
+
+impl SampleIndexConfig {
+    /// E-commerce products sample index
+    pub fn ecommerce_products() -> Self {
+        Self {
+            name: "E-commerce Products".to_string(),
+            description: "Sample e-commerce product catalog".to_string(),
+            index_name: "sample_products".to_string(),
+            mappings: serde_json::json!({
+                "properties": {
+                    "product_id": { "type": "keyword" },
+                    "name": { "type": "text" },
+                    "category": { "type": "keyword" },
+                    "price": { "type": "float" },
+                    "stock": { "type": "integer" },
+                    "description": { "type": "text" },
+                    "tags": { "type": "keyword" },
+                    "created_at": { "type": "date" },
+                    "updated_at": { "type": "date" }
+                }
+            }),
+            settings: serde_json::json!({
+                "number_of_shards": 1,
+                "number_of_replicas": 0
+            }),
+        }
+    }
+
+    /// Application logs sample index
+    pub fn application_logs() -> Self {
+        Self {
+            name: "Application Logs".to_string(),
+            description: "Sample application log entries".to_string(),
+            index_name: "sample_logs".to_string(),
+            mappings: serde_json::json!({
+                "properties": {
+                    "timestamp": { "type": "date" },
+                    "level": { "type": "keyword" },
+                    "message": { "type": "text" },
+                    "service": { "type": "keyword" },
+                    "host": { "type": "keyword" },
+                    "user_id": { "type": "keyword" },
+                    "request_id": { "type": "keyword" },
+                    "duration_ms": { "type": "integer" }
+                }
+            }),
+            settings: serde_json::json!({
+                "number_of_shards": 1,
+                "number_of_replicas": 0
+            }),
+        }
+    }
+
+    /// User analytics sample index
+    pub fn user_analytics() -> Self {
+        Self {
+            name: "User Analytics".to_string(),
+            description: "Sample user behavior analytics".to_string(),
+            index_name: "sample_analytics".to_string(),
+            mappings: serde_json::json!({
+                "properties": {
+                    "user_id": { "type": "keyword" },
+                    "session_id": { "type": "keyword" },
+                    "event_type": { "type": "keyword" },
+                    "page_url": { "type": "keyword" },
+                    "referrer": { "type": "keyword" },
+                    "device": { "type": "keyword" },
+                    "browser": { "type": "keyword" },
+                    "country": { "type": "keyword" },
+                    "city": { "type": "keyword" },
+                    "timestamp": { "type": "date" }
+                }
+            }),
+            settings: serde_json::json!({
+                "number_of_shards": 1,
+                "number_of_replicas": 0
+            }),
+        }
+    }
+
+    /// Get all available sample index configs
+    pub fn all() -> Vec<Self> {
+        vec![
+            Self::ecommerce_products(),
+            Self::application_logs(),
+            Self::user_analytics(),
+        ]
+    }
+}

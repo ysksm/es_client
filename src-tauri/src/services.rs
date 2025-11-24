@@ -327,6 +327,103 @@ impl ESClient {
         let response = self.client.head(&url).send().await?;
         Ok(response.status().is_success())
     }
+
+    /// Bulk insert documents into an index
+    pub async fn bulk_insert(
+        &self,
+        index_name: &str,
+        documents: Vec<serde_json::Value>,
+    ) -> Result<usize, Box<dyn std::error::Error>> {
+        let url = format!("{}/_bulk", self.base_url);
+
+        // Build NDJSON bulk request body
+        let mut bulk_body = String::new();
+        for doc in documents {
+            // Action line
+            let action = serde_json::json!({
+                "index": {
+                    "_index": index_name
+                }
+            });
+            bulk_body.push_str(&serde_json::to_string(&action)?);
+            bulk_body.push('\n');
+
+            // Document line
+            bulk_body.push_str(&serde_json::to_string(&doc)?);
+            bulk_body.push('\n');
+        }
+
+        let response = self.client
+            .post(&url)
+            .header("Content-Type", "application/x-ndjson")
+            .body(bulk_body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Bulk insert failed: {}", error_text).into());
+        }
+
+        let result: serde_json::Value = response.json().await?;
+
+        // Count successful inserts
+        let items = result["items"].as_array()
+            .ok_or("Invalid bulk response")?;
+
+        let success_count = items.iter()
+            .filter(|item| {
+                item["index"]["status"].as_u64()
+                    .map(|status| status >= 200 && status < 300)
+                    .unwrap_or(false)
+            })
+            .count();
+
+        Ok(success_count)
+    }
+
+    /// Search documents in an index
+    pub async fn search(
+        &self,
+        index_name: &str,
+        query: serde_json::Value,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let url = format!("{}{}/_search", self.base_url,
+            if index_name.is_empty() { "".to_string() } else { format!("/{}", index_name) });
+
+        let response = self.client
+            .post(&url)
+            .json(&query)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Search failed: {}", error_text).into());
+        }
+
+        let result: serde_json::Value = response.json().await?;
+        Ok(result)
+    }
+
+    /// Get document count in an index
+    pub async fn count(&self, index_name: &str) -> Result<u64, Box<dyn std::error::Error>> {
+        let url = format!("{}{}/_count", self.base_url,
+            if index_name.is_empty() { "".to_string() } else { format!("/{}", index_name) });
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Count failed: {}", error_text).into());
+        }
+
+        let result: serde_json::Value = response.json().await?;
+        let count = result["count"].as_u64()
+            .ok_or("Invalid count response")?;
+
+        Ok(count)
+    }
 }
 
 #[cfg(test)]

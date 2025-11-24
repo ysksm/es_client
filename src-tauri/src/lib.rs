@@ -1,6 +1,7 @@
 // Modules
 mod commands;
 mod models;
+mod sample_data;
 mod services;
 mod utils;
 
@@ -32,6 +33,11 @@ pub fn run() {
             commands::create_index,
             commands::delete_index,
             commands::index_exists,
+            // Sample index management
+            commands::list_sample_index_templates,
+            commands::create_sample_index,
+            commands::search_documents,
+            commands::count_documents,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
