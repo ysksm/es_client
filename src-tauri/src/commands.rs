@@ -1,21 +1,23 @@
 // Commands module
 // This module contains Tauri command handlers
 
-use crate::models::{AppConfig, ClusterInfo, ProfileConfig, SampleIndexConfig};
+use crate::models::{AppConfig, ClusterInfo, ExtractionJob, ProfileConfig, SampleIndexConfig};
 use crate::sample_data;
-use crate::services::{ConfigService, ESClient};
+use crate::services::{ConfigService, DuckDBService, ESClient};
 use std::sync::Mutex;
 use tauri::State;
 
-/// Shared state for ConfigService
+/// Shared state for services
 pub struct AppState {
     pub config_service: Mutex<ConfigService>,
+    pub duckdb_service: Mutex<DuckDBService>,
 }
 
 impl AppState {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             config_service: Mutex::new(ConfigService::new()?),
+            duckdb_service: Mutex::new(DuckDBService::new()?),
         })
     }
 }
@@ -429,4 +431,133 @@ pub async fn count_documents(
         .count(&index_name)
         .await
         .map_err(|e| format!("Count failed: {}", e))
+}
+
+// === Data Extraction Commands ===
+
+#[tauri::command]
+pub async fn extract_and_store_data(
+    state: State<'_, AppState>,
+    profile_name: String,
+    index_name: String,
+    query: serde_json::Value,
+    table_name: String,
+) -> Result<String, String> {
+    // Get profile and create ES client
+    let profile = {
+        let config_service = state
+            .config_service
+            .lock()
+            .map_err(|e| format!("Failed to lock config service: {}", e))?;
+
+        config_service
+            .get_profile(&profile_name)
+            .map_err(|e| format!("Failed to get profile: {}", e))?
+    };
+
+    let encryptor = crate::utils::Encryptor::new()
+        .map_err(|e| format!("Failed to create encryptor: {}", e))?;
+
+    let client = ESClient::new(&profile, &encryptor)
+        .map_err(|e| format!("Failed to create ES client: {}", e))?;
+
+    // Search documents from Elasticsearch
+    let search_result = client
+        .search(&index_name, query.clone())
+        .await
+        .map_err(|e| format!("Search failed: {}", e))?;
+
+    // Extract hits from search result
+    let hits = search_result["hits"]["hits"]
+        .as_array()
+        .ok_or("Invalid search response")?;
+
+    let documents: Vec<serde_json::Value> = hits
+        .iter()
+        .filter_map(|hit| hit["_source"].clone().as_object().map(|obj| serde_json::Value::Object(obj.clone())))
+        .collect();
+
+    if documents.is_empty() {
+        return Err("No documents found".to_string());
+    }
+
+    // Create extraction job
+    let mut job = ExtractionJob::new(
+        profile_name.clone(),
+        index_name.clone(),
+        serde_json::to_string(&query).unwrap_or_default(),
+        table_name.clone(),
+    );
+    job.record_count = documents.len() as i64;
+
+    // Store in DuckDB
+    {
+        let duckdb_service = state
+            .duckdb_service
+            .lock()
+            .map_err(|e| format!("Failed to lock duckdb service: {}", e))?;
+
+        // Create table with schema from documents
+        duckdb_service
+            .create_data_table(&table_name, &documents)
+            .map_err(|e| format!("Failed to create table: {}", e))?;
+
+        // Insert data
+        let inserted = duckdb_service
+            .insert_data(&table_name, documents)
+            .map_err(|e| format!("Failed to insert data: {}", e))?;
+
+        job.record_count = inserted as i64;
+        job.status = "completed".to_string();
+
+        // Save extraction job to history
+        duckdb_service
+            .save_extraction_job(&job)
+            .map_err(|e| format!("Failed to save extraction job: {}", e))?;
+    }
+
+    Ok(format!(
+        "Successfully extracted {} documents to table '{}'",
+        job.record_count, table_name
+    ))
+}
+
+#[tauri::command]
+pub async fn get_extraction_history(state: State<'_, AppState>) -> Result<Vec<ExtractionJob>, String> {
+    let duckdb_service = state
+        .duckdb_service
+        .lock()
+        .map_err(|e| format!("Failed to lock duckdb service: {}", e))?;
+
+    duckdb_service
+        .get_extraction_history()
+        .map_err(|e| format!("Failed to get extraction history: {}", e))
+}
+
+#[tauri::command]
+pub async fn query_extracted_data(
+    state: State<'_, AppState>,
+    table_name: String,
+    limit: Option<usize>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let duckdb_service = state
+        .duckdb_service
+        .lock()
+        .map_err(|e| format!("Failed to lock duckdb service: {}", e))?;
+
+    duckdb_service
+        .query_table(&table_name, limit)
+        .map_err(|e| format!("Failed to query table: {}", e))
+}
+
+#[tauri::command]
+pub async fn list_duckdb_tables(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let duckdb_service = state
+        .duckdb_service
+        .lock()
+        .map_err(|e| format!("Failed to lock duckdb service: {}", e))?;
+
+    duckdb_service
+        .list_tables()
+        .map_err(|e| format!("Failed to list tables: {}", e))
 }

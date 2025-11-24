@@ -38,6 +38,11 @@ pub fn run() {
             commands::create_sample_index,
             commands::search_documents,
             commands::count_documents,
+            // Data extraction
+            commands::extract_and_store_data,
+            commands::get_extraction_history,
+            commands::query_extracted_data,
+            commands::list_duckdb_tables,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

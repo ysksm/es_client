@@ -13,17 +13,17 @@
 
 | 機能 | ステータス | 進捗 | 優先度 |
 |------|-----------|------|--------|
-| [F1: プロジェクトセットアップ](#feature-1-プロジェクトセットアップ) | 未着手 | 0% | 🔴 |
-| [F2: 接続管理機能](#feature-2-接続管理機能) | 未着手 | 0% | 🔴 |
-| [F3: インデックス管理機能](#feature-3-インデックス管理機能) | 未着手 | 0% | 🔴 |
-| [F4: データ抽出・保存機能](#feature-4-データ抽出保存機能) | 未着手 | 0% | 🔴 |
-| [F5: ローカルDB管理機能](#feature-5-ローカルdb管理機能) | 未着手 | 0% | 🔴 |
+| [F1: プロジェクトセットアップ](#feature-1-プロジェクトセットアップ) | ✅ 完了 | 100% | 🔴 |
+| [F2: 接続管理機能](#feature-2-接続管理機能) | ✅ 完了 | 100% | 🔴 |
+| [F3: インデックス管理機能](#feature-3-インデックス管理機能) | ✅ 完了 | 100% | 🔴 |
+| [F4: データ抽出・保存機能](#feature-4-データ抽出保存機能) | ✅ 完了 | 100% | 🔴 |
+| [F5: ローカルDB管理機能](#feature-5-ローカルdb管理機能) | ✅ 完了 | 100% | 🔴 |
 | [F6: CLI実装](#feature-6-cli実装) | 未着手 | 0% | 🟡 |
 | [F7: GUI実装](#feature-7-gui実装) | 未着手 | 0% | 🔴 |
 | [F8: セキュリティ・品質](#feature-8-セキュリティ品質) | 未着手 | 0% | 🟡 |
 | [F9: パッケージング・リリース](#feature-9-パッケージングリリース) | 未着手 | 0% | 🟡 |
 
-**総合進捗: 0%** ▱▱▱▱▱▱▱▱▱▱
+**総合進捗: 56%** ■■■■■▰▱▱▱▱
 
 ---
 
@@ -690,3 +690,118 @@ es-client db query --sql "SELECT COUNT(*) FROM logs_table"
 - **小さくリリース**: 各Featureが完成したら動作確認を行い、問題があれば早期に修正
 - **テストを忘れずに**: 機能実装と並行してテストを書く習慣をつける
 - **ドキュメントも成果物**: コードだけでなく、使い方のドキュメントも整備する
+
+---
+
+## 🎉 実装完了記録
+
+### Feature 1: プロジェクトセットアップ ✅
+**完了日:** 2025-11-25
+
+**実装内容:**
+- Tauriプロジェクト作成（React + TypeScript）
+- Rust依存関係追加（reqwest, duckdb, tokio, serde, toml, ring, hex, base64, chrono, dirs, thiserror, tracing）
+- Rust 2024エディション形式のモジュール構成
+- 基本的なディレクトリ構造
+
+**コミット:** Initial commit
+
+---
+
+### Feature 2: 接続管理機能 ✅
+**完了日:** 2025-11-25
+
+**実装内容:**
+- **データモデル:** ProfileConfig, AppConfig, AuthType, ClusterInfo, VersionInfo
+- **暗号化ユーティリティ:** AES-256-GCM暗号化、マシン固有キー生成
+- **ConfigService:** プロファイル管理（CRUD）、設定ファイル管理（profiles.toml, config.toml）
+- **ESClient:** reqwestベースのElasticsearch REST APIクライアント
+  - Basic認証とAPIキー認証対応
+  - 接続テスト、クラスター情報取得
+  - インデックス一覧、作成、削除、存在確認
+- **Tauriコマンド:** 13個のコマンドハンドラ実装
+  - プロファイル管理: list_profiles, get_profile, save_profile, delete_profile, encrypt_password
+  - アプリ設定: load_app_config, save_app_config
+  - 接続: test_connection, get_cluster_info
+  - インデックス管理: list_indices, create_index, delete_index, index_exists
+
+**テスト:** すべてのユニットテスト成功（5 passed）
+
+**コミット:** feat: Elasticsearch接続管理機能を実装
+
+---
+
+### Feature 3: インデックス管理機能 ✅
+**完了日:** 2025-11-25
+
+**実装内容:**
+- **SampleIndexConfig:** 3種類のサンプルインデックステンプレート
+  - ecommerce_products: EC商品カタログ
+  - application_logs: アプリケーションログ
+  - user_analytics: ユーザー行動分析
+- **sample_data.rs:** サンプルデータ生成モジュール
+  - generate_products: 商品データ生成（カテゴリ、価格、在庫情報）
+  - generate_logs: ログデータ生成（レベル、メッセージ、サービス情報）
+  - generate_analytics: 分析データ生成（ユーザー行動、デバイス、地域情報）
+- **ESClient拡張:**
+  - bulk_insert: Bulk APIでドキュメント一括挿入
+  - search: ドキュメント検索
+  - count: ドキュメント件数取得
+- **Tauriコマンド追加:**
+  - list_sample_index_templates: テンプレート一覧取得
+  - create_sample_index: サンプルインデックス作成とデータ投入
+  - search_documents: ドキュメント検索
+  - count_documents: ドキュメント件数取得
+
+**テスト:** すべてのユニットテスト成功（8 passed）
+
+**コミット:** feat: サンプルインデックス作成機能を実装
+
+---
+
+### Feature 4 & 5: データ抽出・保存機能 & ローカルDB管理機能 ✅
+**完了日:** 2025-11-25
+
+**実装内容:**
+- **ExtractionJob:** データ抽出履歴モデル
+- **DuckDBService:** ローカルデータベースサービス
+  - init_tables: extraction_historyテーブル初期化
+  - save_extraction_job: 抽出ジョブ履歴保存
+  - get_extraction_history: 抽出履歴取得（最新100件）
+  - create_data_table: 抽出データ用テーブル自動生成（スキーマ推測）
+  - insert_data: ドキュメントデータ挿入（型変換対応）
+  - query_table: テーブルデータクエリ
+  - list_tables: テーブル一覧取得
+- **Tauriコマンド追加:**
+  - extract_and_store_data: Elasticsearchから検索してDuckDBに保存
+  - get_extraction_history: 抽出履歴取得
+  - query_extracted_data: 抽出済みデータクエリ
+  - list_duckdb_tables: DuckDBテーブル一覧
+- **AppState:** DuckDBService追加
+
+**テスト:** すべてのユニットテスト成功
+
+**コミット:** feat: データ抽出・保存機能を実装
+
+---
+
+### 📊 現在の状態
+
+**実装済み機能:**
+- ✅ Elasticsearchへの接続・認証
+- ✅ プロファイル管理（暗号化保存）
+- ✅ インデックス管理（一覧、作成、削除）
+- ✅ サンプルデータ生成・投入
+- ✅ データ検索・抽出
+- ✅ DuckDBへのデータ保存
+- ✅ 抽出履歴管理
+- ✅ ローカルDBクエリ
+
+**Milestone 1達成に必要な残タスク:**
+- CLI実装（Feature 6）
+
+**次のステップ:**
+1. CLI実装（Feature 6）でMilestone 1達成
+2. GUI実装（Feature 7）でMilestone 2達成
+3. セキュリティ・品質強化（Feature 8）
+4. パッケージング・リリース（Feature 9）でMilestone 3達成

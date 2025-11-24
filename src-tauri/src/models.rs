@@ -188,3 +188,36 @@ impl SampleIndexConfig {
         ]
     }
 }
+
+/// Data extraction job record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractionJob {
+    pub id: i64,
+    pub profile_name: String,
+    pub index_name: String,
+    pub query: String,
+    pub table_name: String,
+    pub record_count: i64,
+    pub created_at: String,
+    pub status: String,
+}
+
+impl ExtractionJob {
+    pub fn new(
+        profile_name: String,
+        index_name: String,
+        query: String,
+        table_name: String,
+    ) -> Self {
+        Self {
+            id: 0,
+            profile_name,
+            index_name,
+            query,
+            table_name,
+            record_count: 0,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            status: "pending".to_string(),
+        }
+    }
+}

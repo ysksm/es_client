@@ -1,9 +1,10 @@
 // Services module
 // This module contains business logic services
 
-use crate::models::{AppConfig, AuthType, ClusterInfo, ProfileConfig};
+use crate::models::{AppConfig, AuthType, ClusterInfo, ExtractionJob, ProfileConfig};
 use crate::utils::Encryptor;
 use base64::{Engine as _, engine::general_purpose};
+use duckdb::{Connection, params};
 use reqwest::{self, header, Client};
 use std::fs;
 use std::path::PathBuf;
@@ -423,6 +424,296 @@ impl ESClient {
             .ok_or("Invalid count response")?;
 
         Ok(count)
+    }
+}
+
+/// DuckDB service for local data storage
+pub struct DuckDBService {
+    db_path: PathBuf,
+}
+
+impl DuckDBService {
+    /// Create a new DuckDBService
+    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let home_dir = dirs::home_dir()
+            .ok_or("Failed to get home directory")?;
+        let db_path = home_dir.join(".es_client").join("data.duckdb");
+
+        // Ensure parent directory exists
+        if let Some(parent) = db_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+
+        let service = Self { db_path };
+
+        // Initialize database tables
+        service.init_tables()?;
+
+        Ok(service)
+    }
+
+    /// Get a connection to the database
+    fn get_connection(&self) -> Result<Connection, Box<dyn std::error::Error>> {
+        let conn = Connection::open(&self.db_path)?;
+        Ok(conn)
+    }
+
+    /// Initialize database tables
+    fn init_tables(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.get_connection()?;
+
+        // Create extraction_history table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS extraction_history (
+                id INTEGER PRIMARY KEY,
+                profile_name TEXT NOT NULL,
+                index_name TEXT NOT NULL,
+                query TEXT NOT NULL,
+                table_name TEXT NOT NULL,
+                record_count INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                status TEXT NOT NULL
+            )",
+            [],
+        )?;
+
+        Ok(())
+    }
+
+    /// Save extraction job to history
+    pub fn save_extraction_job(&self, job: &ExtractionJob) -> Result<i64, Box<dyn std::error::Error>> {
+        let conn = self.get_connection()?;
+
+        conn.execute(
+            "INSERT INTO extraction_history (profile_name, index_name, query, table_name, record_count, created_at, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            params![
+                &job.profile_name,
+                &job.index_name,
+                &job.query,
+                &job.table_name,
+                &job.record_count,
+                &job.created_at,
+                &job.status,
+            ],
+        )?;
+
+        // Get the last inserted ID
+        let mut stmt = conn.prepare("SELECT last_insert_rowid()")?;
+        let id: i64 = stmt.query_row([], |row| row.get(0))?;
+        Ok(id)
+    }
+
+    /// Get extraction job history
+    pub fn get_extraction_history(&self) -> Result<Vec<ExtractionJob>, Box<dyn std::error::Error>> {
+        let conn = self.get_connection()?;
+
+        let mut stmt = conn.prepare(
+            "SELECT id, profile_name, index_name, query, table_name, record_count, created_at, status
+             FROM extraction_history
+             ORDER BY created_at DESC
+             LIMIT 100"
+        )?;
+
+        let jobs = stmt.query_map([], |row| {
+            Ok(ExtractionJob {
+                id: row.get(0)?,
+                profile_name: row.get(1)?,
+                index_name: row.get(2)?,
+                query: row.get(3)?,
+                table_name: row.get(4)?,
+                record_count: row.get(5)?,
+                created_at: row.get(6)?,
+                status: row.get(7)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(jobs)
+    }
+
+    /// Create a table for extracted data
+    pub fn create_data_table(
+        &self,
+        table_name: &str,
+        documents: &[serde_json::Value],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if documents.is_empty() {
+            return Err("No documents to create table schema".into());
+        }
+
+        let conn = self.get_connection()?;
+
+        // Drop table if exists
+        conn.execute(&format!("DROP TABLE IF EXISTS {}", table_name), [])?;
+
+        // Analyze first document to determine schema
+        let first_doc = &documents[0];
+        let mut columns = Vec::new();
+
+        if let Some(obj) = first_doc.as_object() {
+            for (key, value) in obj {
+                let col_type = match value {
+                    serde_json::Value::Number(_) => {
+                        if value.is_f64() {
+                            "DOUBLE"
+                        } else {
+                            "BIGINT"
+                        }
+                    }
+                    serde_json::Value::Bool(_) => "BOOLEAN",
+                    serde_json::Value::Array(_) => "TEXT", // Store as JSON string
+                    _ => "TEXT",
+                };
+                columns.push(format!("{} {}", key, col_type));
+            }
+        }
+
+        let create_sql = format!(
+            "CREATE TABLE {} ({})",
+            table_name,
+            columns.join(", ")
+        );
+
+        conn.execute(&create_sql, [])?;
+
+        Ok(())
+    }
+
+    /// Insert extracted data into table
+    pub fn insert_data(
+        &self,
+        table_name: &str,
+        documents: Vec<serde_json::Value>,
+    ) -> Result<usize, Box<dyn std::error::Error>> {
+        if documents.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self.get_connection()?;
+
+        // Get column names from first document
+        let first_doc = &documents[0];
+        let columns: Vec<String> = if let Some(obj) = first_doc.as_object() {
+            obj.keys().cloned().collect()
+        } else {
+            return Err("Invalid document format".into());
+        };
+
+        let placeholders = (0..columns.len())
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let insert_sql = format!(
+            "INSERT INTO {} ({}) VALUES ({})",
+            table_name,
+            columns.join(", "),
+            placeholders
+        );
+
+        let mut inserted = 0;
+        for doc in documents {
+            if let Some(obj) = doc.as_object() {
+                let values: Vec<duckdb::types::Value> = columns
+                    .iter()
+                    .map(|col| {
+                        let val = &obj[col];
+                        match val {
+                            serde_json::Value::Number(n) => {
+                                if let Some(i) = n.as_i64() {
+                                    duckdb::types::Value::BigInt(i)
+                                } else if let Some(f) = n.as_f64() {
+                                    duckdb::types::Value::Double(f)
+                                } else {
+                                    duckdb::types::Value::Null
+                                }
+                            }
+                            serde_json::Value::Bool(b) => duckdb::types::Value::Boolean(*b),
+                            serde_json::Value::String(s) => duckdb::types::Value::Text(s.clone()),
+                            serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+                                duckdb::types::Value::Text(val.to_string())
+                            }
+                            serde_json::Value::Null => duckdb::types::Value::Null,
+                        }
+                    })
+                    .collect();
+
+                conn.execute(&insert_sql, duckdb::params_from_iter(values))?;
+                inserted += 1;
+            }
+        }
+
+        Ok(inserted)
+    }
+
+    /// Query data from a table
+    pub fn query_table(
+        &self,
+        table_name: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error>> {
+        let conn = self.get_connection()?;
+
+        let sql = if let Some(l) = limit {
+            format!("SELECT * FROM {} LIMIT {}", table_name, l)
+        } else {
+            format!("SELECT * FROM {}", table_name)
+        };
+
+        let mut stmt = conn.prepare(&sql)?;
+        let column_count = stmt.column_count();
+
+        let column_names: Vec<String> = (0..column_count)
+            .map(|i| {
+                stmt.column_name(i)
+                    .map(|name| name.to_string())
+                    .unwrap_or_else(|_| "unknown".to_string())
+            })
+            .collect();
+
+        let rows = stmt.query_map([], |row| {
+            let mut obj = serde_json::Map::new();
+
+            for (i, col_name) in column_names.iter().enumerate() {
+                let value: Result<duckdb::types::Value, _> = row.get(i);
+                if let Ok(val) = value {
+                    let json_val = match val {
+                        duckdb::types::Value::BigInt(n) => serde_json::Value::Number(n.into()),
+                        duckdb::types::Value::Double(f) => {
+                            serde_json::Number::from_f64(f)
+                                .map(serde_json::Value::Number)
+                                .unwrap_or(serde_json::Value::Null)
+                        }
+                        duckdb::types::Value::Text(s) => serde_json::Value::String(s),
+                        duckdb::types::Value::Boolean(b) => serde_json::Value::Bool(b),
+                        _ => serde_json::Value::Null,
+                    };
+                    obj.insert(col_name.clone(), json_val);
+                }
+            }
+
+            Ok(serde_json::Value::Object(obj))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(rows)
+    }
+
+    /// List all tables in the database
+    pub fn list_tables(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let conn = self.get_connection()?;
+
+        let mut stmt = conn.prepare(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        )?;
+
+        let tables = stmt.query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(tables)
     }
 }
 
