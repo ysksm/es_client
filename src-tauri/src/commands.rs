@@ -461,9 +461,28 @@ pub async fn extract_and_store_data(
     let client = ESClient::new(&profile, &encryptor)
         .map_err(|e| format!("Failed to create ES client: {}", e))?;
 
+    // Ensure query has size parameter (default to 1000 if not specified)
+    let mut search_query = query.clone();
+    if search_query.is_object() {
+        let obj = search_query.as_object_mut().unwrap();
+        if !obj.contains_key("size") {
+            obj.insert("size".to_string(), serde_json::json!(1000));
+        }
+        // Add match_all query if no query specified
+        if !obj.contains_key("query") {
+            obj.insert("query".to_string(), serde_json::json!({"match_all": {}}));
+        }
+    } else {
+        // If query is not an object, create a default one
+        search_query = serde_json::json!({
+            "query": {"match_all": {}},
+            "size": 1000
+        });
+    }
+
     // Search documents from Elasticsearch
     let search_result = client
-        .search(&index_name, query.clone())
+        .search(&index_name, search_query)
         .await
         .map_err(|e| format!("Search failed: {}", e))?;
 
@@ -478,7 +497,7 @@ pub async fn extract_and_store_data(
         .collect();
 
     if documents.is_empty() {
-        return Err("No documents found".to_string());
+        return Err("No documents found. Check if the index contains data.".to_string());
     }
 
     // Create extraction job
@@ -560,4 +579,47 @@ pub async fn list_duckdb_tables(state: State<'_, AppState>) -> Result<Vec<String
     duckdb_service
         .list_tables()
         .map_err(|e| format!("Failed to list tables: {}", e))
+}
+
+#[tauri::command]
+pub async fn query_local(
+    state: State<'_, AppState>,
+    sql: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    let duckdb_service = state
+        .duckdb_service
+        .lock()
+        .map_err(|e| format!("Failed to lock duckdb service: {}", e))?;
+
+    duckdb_service
+        .execute_sql(&sql)
+        .map_err(|e| format!("SQL execution failed: {}", e))
+}
+
+#[tauri::command]
+pub async fn list_tables(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let duckdb_service = state
+        .duckdb_service
+        .lock()
+        .map_err(|e| format!("Failed to lock duckdb service: {}", e))?;
+
+    duckdb_service
+        .list_tables()
+        .map_err(|e| format!("Failed to list tables: {}", e))
+}
+
+#[tauri::command]
+pub async fn export_to_parquet(
+    state: State<'_, AppState>,
+    table_name: String,
+    output_path: String,
+) -> Result<String, String> {
+    let duckdb_service = state
+        .duckdb_service
+        .lock()
+        .map_err(|e| format!("Failed to lock duckdb service: {}", e))?;
+
+    duckdb_service
+        .export_to_parquet(&table_name, &output_path)
+        .map_err(|e| format!("Export failed: {}", e))
 }

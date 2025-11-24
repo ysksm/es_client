@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Card, Button, Input } from '../components/ui';
+import { useState, useEffect } from 'react';
+import { Card, Button } from '../components/ui';
 import {
   TableCellsIcon,
   PlayIcon,
@@ -11,20 +11,28 @@ import * as api from '../api/tauri';
 
 export const Database = () => {
   const [tables, setTables] = useState<string[]>([]);
-  const [sqlQuery, setSqlQuery] = useState('SELECT * FROM ');
+  const [sqlQuery, setSqlQuery] = useState('');
   const [queryResults, setQueryResults] = useState<any[] | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [isLoadingTables, setIsLoadingTables] = useState(false);
+
+  // 初回マウント時にテーブル一覧を取得
+  useEffect(() => {
+    handleListTables();
+  }, []);
 
   const handleListTables = async () => {
     setIsLoadingTables(true);
     try {
       const tableList = await api.listTables();
       setTables(tableList);
-      toast.success(`${tableList.length} 件のテーブルを読み込みました`);
+      if (tableList.length > 0) {
+        toast.success(`${tableList.length} 件のテーブルを読み込みました`);
+      }
     } catch (error) {
-      toast.error('テーブル一覧の取得に失敗しました');
-      console.error(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast.error(`テーブル一覧の取得に失敗: ${errorMessage}`);
+      console.error('List tables error:', error);
     } finally {
       setIsLoadingTables(false);
     }
@@ -40,10 +48,11 @@ export const Database = () => {
     try {
       const results = await api.queryLocal(sqlQuery);
       setQueryResults(results);
-      toast.success('クエリを実行しました');
+      toast.success(`クエリを実行しました (${results.length} 件)`);
     } catch (error) {
-      toast.error('クエリの実行に失敗しました');
-      console.error(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast.error(`クエリ実行エラー: ${errorMessage}`);
+      console.error('Query error:', error);
       setQueryResults(null);
     } finally {
       setIsExecuting(false);
@@ -56,20 +65,27 @@ export const Database = () => {
       return;
     }
 
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `export_${timestamp}.parquet`;
+
     try {
-      const result = await api.exportToParquet(sqlQuery, 'export.parquet');
+      const result = await api.exportToParquet(sqlQuery, filename);
       toast.success(result);
     } catch (error) {
-      toast.error('エクスポートに失敗しました');
-      console.error(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast.error(`エクスポートに失敗: ${errorMessage}`);
+      console.error('Export error:', error);
     }
   };
 
   const handleQuickQuery = (tableName: string, queryType: 'preview' | 'count') => {
+    // テーブル名をダブルクォートで囲む（特殊文字対応）
+    const quotedName = `"${tableName}"`;
     if (queryType === 'preview') {
-      setSqlQuery(`SELECT * FROM ${tableName} LIMIT 100`);
+      setSqlQuery(`SELECT * FROM ${quotedName} LIMIT 100`);
     } else if (queryType === 'count') {
-      setSqlQuery(`SELECT COUNT(*) as count FROM ${tableName}`);
+      setSqlQuery(`SELECT COUNT(*) as count FROM ${quotedName}`);
     }
   };
 

@@ -464,20 +464,35 @@ impl DuckDBService {
     fn init_tables(&self) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.get_connection()?;
 
-        // Create extraction_history table
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS extraction_history (
-                id INTEGER PRIMARY KEY,
-                profile_name TEXT NOT NULL,
-                index_name TEXT NOT NULL,
-                query TEXT NOT NULL,
-                table_name TEXT NOT NULL,
-                record_count INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                status TEXT NOT NULL
-            )",
-            [],
-        )?;
+        // Check if table exists
+        let table_exists: bool = {
+            let mut stmt = conn.prepare(
+                "SELECT COUNT(*) FROM information_schema.tables
+                 WHERE table_schema = 'main' AND table_name = 'extraction_history'"
+            )?;
+            let count: i64 = stmt.query_row([], |row| row.get(0))?;
+            count > 0
+        };
+
+        if !table_exists {
+            // Create sequence for auto-increment
+            conn.execute("CREATE SEQUENCE IF NOT EXISTS extraction_history_seq START 1", [])?;
+
+            // Create extraction_history table with auto-increment
+            conn.execute(
+                "CREATE TABLE extraction_history (
+                    id INTEGER PRIMARY KEY DEFAULT nextval('extraction_history_seq'),
+                    profile_name TEXT NOT NULL,
+                    index_name TEXT NOT NULL,
+                    query TEXT NOT NULL,
+                    table_name TEXT NOT NULL,
+                    record_count INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    status TEXT NOT NULL
+                )",
+                [],
+            )?;
+        }
 
         Ok(())
     }
@@ -486,9 +501,14 @@ impl DuckDBService {
     pub fn save_extraction_job(&self, job: &ExtractionJob) -> Result<i64, Box<dyn std::error::Error>> {
         let conn = self.get_connection()?;
 
-        conn.execute(
+        // Use RETURNING to get the inserted ID
+        let mut stmt = conn.prepare(
             "INSERT INTO extraction_history (profile_name, index_name, query, table_name, record_count, created_at, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             RETURNING id"
+        )?;
+
+        let id: i64 = stmt.query_row(
             params![
                 &job.profile_name,
                 &job.index_name,
@@ -498,11 +518,9 @@ impl DuckDBService {
                 &job.created_at,
                 &job.status,
             ],
+            |row| row.get(0),
         )?;
 
-        // Get the last inserted ID
-        let mut stmt = conn.prepare("SELECT last_insert_rowid()")?;
-        let id: i64 = stmt.query_row([], |row| row.get(0))?;
         Ok(id)
     }
 
@@ -534,6 +552,30 @@ impl DuckDBService {
         Ok(jobs)
     }
 
+    /// Sanitize column name for DuckDB
+    fn sanitize_column_name(name: &str) -> String {
+        // Replace special characters with underscore
+        let sanitized: String = name
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+
+        // Ensure it doesn't start with a number
+        if sanitized.chars().next().map(|c| c.is_numeric()).unwrap_or(false) {
+            format!("col_{}", sanitized)
+        } else if sanitized.is_empty() {
+            "col_unnamed".to_string()
+        } else {
+            sanitized
+        }
+    }
+
     /// Create a table for extracted data
     pub fn create_data_table(
         &self,
@@ -546,8 +588,11 @@ impl DuckDBService {
 
         let conn = self.get_connection()?;
 
+        // Sanitize table name
+        let safe_table_name = Self::sanitize_column_name(table_name);
+
         // Drop table if exists
-        conn.execute(&format!("DROP TABLE IF EXISTS {}", table_name), [])?;
+        conn.execute(&format!("DROP TABLE IF EXISTS \"{}\"", safe_table_name), [])?;
 
         // Analyze first document to determine schema
         let first_doc = &documents[0];
@@ -555,6 +600,7 @@ impl DuckDBService {
 
         if let Some(obj) = first_doc.as_object() {
             for (key, value) in obj {
+                let safe_col_name = Self::sanitize_column_name(key);
                 let col_type = match value {
                     serde_json::Value::Number(_) => {
                         if value.is_f64() {
@@ -567,13 +613,13 @@ impl DuckDBService {
                     serde_json::Value::Array(_) => "TEXT", // Store as JSON string
                     _ => "TEXT",
                 };
-                columns.push(format!("{} {}", key, col_type));
+                columns.push(format!("\"{}\" {}", safe_col_name, col_type));
             }
         }
 
         let create_sql = format!(
-            "CREATE TABLE {} ({})",
-            table_name,
+            "CREATE TABLE \"{}\" ({})",
+            safe_table_name,
             columns.join(", ")
         );
 
@@ -594,33 +640,40 @@ impl DuckDBService {
 
         let conn = self.get_connection()?;
 
-        // Get column names from first document
+        // Sanitize table name
+        let safe_table_name = Self::sanitize_column_name(table_name);
+
+        // Get column names from first document (original -> sanitized mapping)
         let first_doc = &documents[0];
-        let columns: Vec<String> = if let Some(obj) = first_doc.as_object() {
-            obj.keys().cloned().collect()
+        let column_mapping: Vec<(String, String)> = if let Some(obj) = first_doc.as_object() {
+            obj.keys()
+                .map(|k| (k.clone(), Self::sanitize_column_name(k)))
+                .collect()
         } else {
             return Err("Invalid document format".into());
         };
 
-        let placeholders = (0..columns.len())
+        let safe_columns: Vec<&str> = column_mapping.iter().map(|(_, s)| s.as_str()).collect();
+
+        let placeholders = (0..column_mapping.len())
             .map(|_| "?")
             .collect::<Vec<_>>()
             .join(", ");
 
         let insert_sql = format!(
-            "INSERT INTO {} ({}) VALUES ({})",
-            table_name,
-            columns.join(", "),
+            "INSERT INTO \"{}\" ({}) VALUES ({})",
+            safe_table_name,
+            safe_columns.iter().map(|c| format!("\"{}\"", c)).collect::<Vec<_>>().join(", "),
             placeholders
         );
 
         let mut inserted = 0;
         for doc in documents {
             if let Some(obj) = doc.as_object() {
-                let values: Vec<duckdb::types::Value> = columns
+                let values: Vec<duckdb::types::Value> = column_mapping
                     .iter()
-                    .map(|col| {
-                        let val = &obj[col];
+                    .map(|(original_col, _)| {
+                        let val = obj.get(original_col).unwrap_or(&serde_json::Value::Null);
                         match val {
                             serde_json::Value::Number(n) => {
                                 if let Some(i) = n.as_i64() {
@@ -657,10 +710,13 @@ impl DuckDBService {
     ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error>> {
         let conn = self.get_connection()?;
 
+        // Sanitize table name for safety
+        let safe_table_name = Self::sanitize_column_name(table_name);
+
         let sql = if let Some(l) = limit {
-            format!("SELECT * FROM {} LIMIT {}", table_name, l)
+            format!("SELECT * FROM \"{}\" LIMIT {}", safe_table_name, l)
         } else {
-            format!("SELECT * FROM {}", table_name)
+            format!("SELECT * FROM \"{}\"", safe_table_name)
         };
 
         let mut stmt = conn.prepare(&sql)?;
@@ -714,6 +770,106 @@ impl DuckDBService {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(tables)
+    }
+
+    /// Execute arbitrary SQL query
+    pub fn execute_sql(&self, sql: &str) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error>> {
+        let conn = self.get_connection()?;
+
+        // Get column names using DESCRIBE or by wrapping in a subquery
+        let column_names: Vec<String> = {
+            let describe_sql = format!("DESCRIBE ({})", sql);
+            let mut desc_stmt = conn.prepare(&describe_sql)?;
+            let names: Vec<String> = desc_stmt
+                .query_map([], |row| row.get::<_, String>(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+            if names.is_empty() {
+                // Fallback: generate generic column names
+                (0..100).map(|i| format!("col_{}", i)).collect()
+            } else {
+                names
+            }
+        };
+
+        // Execute the actual query
+        let mut stmt = conn.prepare(sql)?;
+        let rows: Vec<Vec<(usize, duckdb::types::Value)>> = stmt
+            .query_map([], |row| {
+                let mut values = Vec::new();
+                let mut idx = 0;
+                loop {
+                    match row.get::<_, duckdb::types::Value>(idx) {
+                        Ok(val) => {
+                            values.push((idx, val));
+                            idx += 1;
+                        }
+                        Err(_) => break,
+                    }
+                }
+                Ok(values)
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Convert to JSON
+        let results: Vec<serde_json::Value> = rows
+            .into_iter()
+            .map(|row_values| {
+                let mut obj = serde_json::Map::new();
+                for (i, val) in row_values {
+                    let col_name = column_names.get(i).cloned().unwrap_or_else(|| format!("col_{}", i));
+                    let json_val = match val {
+                        duckdb::types::Value::BigInt(n) => serde_json::Value::Number(n.into()),
+                        duckdb::types::Value::Int(n) => serde_json::Value::Number(n.into()),
+                        duckdb::types::Value::Double(f) => {
+                            serde_json::Number::from_f64(f)
+                                .map(serde_json::Value::Number)
+                                .unwrap_or(serde_json::Value::Null)
+                        }
+                        duckdb::types::Value::Text(s) => serde_json::Value::String(s),
+                        duckdb::types::Value::Boolean(b) => serde_json::Value::Bool(b),
+                        _ => serde_json::Value::Null,
+                    };
+                    obj.insert(col_name, json_val);
+                }
+                serde_json::Value::Object(obj)
+            })
+            .collect();
+
+        Ok(results)
+    }
+
+    /// Export query result to Parquet file
+    pub fn export_to_parquet(
+        &self,
+        sql_or_table: &str,
+        output_path: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let conn = self.get_connection()?;
+
+        // Determine the full output path
+        let full_path = if output_path.starts_with('/') || output_path.starts_with('~') {
+            output_path.to_string()
+        } else {
+            // Use home directory as default location
+            let home = dirs::home_dir().ok_or("Failed to get home directory")?;
+            home.join(output_path).to_string_lossy().to_string()
+        };
+
+        // Check if input is a SELECT query or a table name
+        let export_sql = if sql_or_table.trim().to_uppercase().starts_with("SELECT") {
+            // Export query result
+            format!("COPY ({}) TO '{}' (FORMAT PARQUET)", sql_or_table, full_path)
+        } else {
+            // Export table
+            let safe_table_name = Self::sanitize_column_name(sql_or_table);
+            format!("COPY \"{}\" TO '{}' (FORMAT PARQUET)", safe_table_name, full_path)
+        };
+
+        conn.execute(&export_sql, [])?;
+
+        Ok(format!("Exported to {}", full_path))
     }
 }
 

@@ -142,3 +142,19 @@ export const queryExtractedData = async (
 export const listDuckdbTables = async (): Promise<string[]> => {
   return invoke('list_duckdb_tables');
 };
+
+// Local Database
+export const queryLocal = async (sql: string): Promise<any[]> => {
+  return invoke('query_local', { sql });
+};
+
+export const listTables = async (): Promise<string[]> => {
+  return invoke('list_tables');
+};
+
+export const exportToParquet = async (
+  tableName: string,
+  outputPath: string
+): Promise<string> => {
+  return invoke('export_to_parquet', { tableName, outputPath });
+};

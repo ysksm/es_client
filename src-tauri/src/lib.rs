@@ -43,6 +43,10 @@ pub fn run() {
             commands::get_extraction_history,
             commands::query_extracted_data,
             commands::list_duckdb_tables,
+            // Local database
+            commands::query_local,
+            commands::list_tables,
+            commands::export_to_parquet,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

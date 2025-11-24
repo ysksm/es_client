@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useProfileStore } from '../store/profileStore';
 import { useIndexStore } from '../store/indexStore';
-import { Card, Button, Input, Loading } from '../components/ui';
+import { Card, Button, Input } from '../components/ui';
 import {
   ArrowDownTrayIcon,
-  CircleStackIcon,
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
@@ -36,7 +35,7 @@ export const Extract = () => {
 
     let query: SearchQuery;
     try {
-      const parsedQuery = JSON.parse(queryJson);
+      const parsedQuery = queryJson.trim() === '' ? {} : JSON.parse(queryJson);
       query = {
         ...parsedQuery,
         size: parseInt(size) || 1000,
@@ -57,8 +56,9 @@ export const Extract = () => {
       setLastResult(result);
       toast.success('データ抽出が完了しました');
     } catch (error) {
-      toast.error('データ抽出に失敗しました');
-      console.error(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast.error(`データ抽出に失敗: ${errorMessage}`);
+      console.error('Extraction error:', error);
     } finally {
       setIsExtracting(false);
     }
@@ -213,7 +213,7 @@ export const Extract = () => {
                   <li>抽出元のインデックスを選択</li>
                   <li>保存先のテーブル名を入力</li>
                   <li>取得件数を指定（デフォルト: 1000件）</li>
-                  <li>検索クエリを設定（空の場合は全件）</li>
+                  <li>検索クエリを設定（空 or {} で全件）</li>
                   <li>「データを抽出」ボタンをクリック</li>
                 </ol>
               </div>
@@ -224,14 +224,36 @@ export const Extract = () => {
                 </h4>
                 <div className="space-y-2">
                   <div>
-                    <p className="font-medium">全件取得:</p>
-                    <code className="block bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs mt-1">
+                    <p className="font-medium">全件取得（空でもOK）:</p>
+                    <code
+                      className="block bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs mt-1 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-800"
+                      onClick={() => setQueryJson('{}')}
+                      title="クリックして適用"
+                    >
                       {'{}'}
                     </code>
                   </div>
                   <div>
+                    <p className="font-medium">match_allで全件:</p>
+                    <code
+                      className="block bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs mt-1 whitespace-pre cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-800"
+                      onClick={() => setQueryJson('{\n  "query": {\n    "match_all": {}\n  }\n}')}
+                      title="クリックして適用"
+                    >
+                      {`{
+  "query": {
+    "match_all": {}
+  }
+}`}
+                    </code>
+                  </div>
+                  <div>
                     <p className="font-medium">条件検索:</p>
-                    <code className="block bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs mt-1 whitespace-pre">
+                    <code
+                      className="block bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs mt-1 whitespace-pre cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-800"
+                      onClick={() => setQueryJson('{\n  "query": {\n    "match": {\n      "status": "active"\n    }\n  }\n}')}
+                      title="クリックして適用"
+                    >
                       {`{
   "query": {
     "match": {
@@ -243,7 +265,11 @@ export const Extract = () => {
                   </div>
                   <div>
                     <p className="font-medium">時間範囲指定:</p>
-                    <code className="block bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs mt-1 whitespace-pre">
+                    <code
+                      className="block bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs mt-1 whitespace-pre cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-800"
+                      onClick={() => setQueryJson('{\n  "query": {\n    "range": {\n      "@timestamp": {\n        "gte": "now-7d"\n      }\n    }\n  }\n}')}
+                      title="クリックして適用"
+                    >
                       {`{
   "query": {
     "range": {
@@ -256,6 +282,9 @@ export const Extract = () => {
                     </code>
                   </div>
                 </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  ※ クエリ例をクリックすると自動入力されます
+                </p>
               </div>
             </div>
           </Card>

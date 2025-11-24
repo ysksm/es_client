@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { useProfileStore } from '../store/profileStore';
 import { Card, Loading } from '../components/ui';
 import {
