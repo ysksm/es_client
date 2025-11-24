@@ -1,0 +1,33 @@
+[package]
+name = "es-client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Elasticsearch Index Management CLI Tool"
+
+[[bin]]
+name = "es-client"
+path = "src/main.rs"
+
+[dependencies]
+# Shared library from Tauri backend
+es_client_lib = { path = "../src-tauri" }
+
+# CLI framework
+clap = { workspace = true }
+colored = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Utilities
+dirs = { workspace = true }
+chrono = { workspace = true }

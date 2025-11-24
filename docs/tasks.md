@@ -18,12 +18,12 @@
 | [F3: インデックス管理機能](#feature-3-インデックス管理機能) | ✅ 完了 | 100% | 🔴 |
 | [F4: データ抽出・保存機能](#feature-4-データ抽出保存機能) | ✅ 完了 | 100% | 🔴 |
 | [F5: ローカルDB管理機能](#feature-5-ローカルdb管理機能) | ✅ 完了 | 100% | 🔴 |
-| [F6: CLI実装](#feature-6-cli実装) | 未着手 | 0% | 🟡 |
+| [F6: CLI実装](#feature-6-cli実装) | ✅ 完了 | 100% | 🟡 |
 | [F7: GUI実装](#feature-7-gui実装) | 未着手 | 0% | 🔴 |
 | [F8: セキュリティ・品質](#feature-8-セキュリティ品質) | 未着手 | 0% | 🟡 |
 | [F9: パッケージング・リリース](#feature-9-パッケージングリリース) | 未着手 | 0% | 🟡 |
 
-**総合進捗: 56%** ■■■■■▰▱▱▱▱
+**総合進捗: 67%** ■■■■■■▰▱▱▱
 
 ---
 
@@ -785,6 +785,33 @@ es-client db query --sql "SELECT COUNT(*) FROM logs_table"
 
 ---
 
+### Feature 6: CLI実装 ✅
+**完了日:** 2025-11-25
+
+**実装内容:**
+- **Cargoワークスペース:** ルートレベルでワークスペース設定、src-tauriとcliの共有依存関係管理
+- **CLIバイナリプロジェクト:** cli/ディレクトリにバイナリプロジェクト作成
+- **clapフレームワーク:** derive APIを使用したCLI実装
+- **colored出力:** カラフルで見やすいターミナル出力
+- **実装コマンド:**
+  - `connect`: 接続設定（Basic認証/APIキー認証、SSL設定）
+  - `profile list/show/delete`: プロファイル管理
+  - `index list/create/info`: インデックス管理
+  - `extract`: データ抽出とDuckDB保存
+  - `db list/query/show/drop`: ローカルDB管理
+- **ライブラリ再利用:** src-tauriのmodels/services/utilsモジュールを公開して再利用
+- **README:** CLI使用方法とワークフロー例を記載
+
+**ファイル:**
+- `/Cargo.toml`: ワークスペース設定
+- `/cli/Cargo.toml`: CLIプロジェクト設定
+- `/cli/src/main.rs`: CLI実装（約600行）
+- `/cli/README.md`: CLI使用ガイド
+
+**コミット:** （次のコミット）
+
+---
+
 ### 📊 現在の状態
 
 **実装済み機能:**
@@ -796,12 +823,17 @@ es-client db query --sql "SELECT COUNT(*) FROM logs_table"
 - ✅ DuckDBへのデータ保存
 - ✅ 抽出履歴管理
 - ✅ ローカルDBクエリ
+- ✅ CLI実装（全コマンド）
 
-**Milestone 1達成に必要な残タスク:**
-- CLI実装（Feature 6）
+**🎉 Milestone 1達成！**
+- ✅ Elasticsearchに接続できる
+- ✅ シンプルなクエリでデータを抽出できる
+- ✅ 抽出したデータをDuckDBに保存できる
+- ✅ 保存したデータをSQLで確認できる
+- ✅ CLIから全機能を利用可能
 
 **次のステップ:**
-1. CLI実装（Feature 6）でMilestone 1達成
+1. ✅ Milestone 1達成（動作するCLIプロトタイプ）
 2. GUI実装（Feature 7）でMilestone 2達成
 3. セキュリティ・品質強化（Feature 8）
 4. パッケージング・リリース（Feature 9）でMilestone 3達成

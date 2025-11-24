@@ -1,9 +1,9 @@
 // Modules
 mod commands;
-mod models;
+pub mod models;
 mod sample_data;
-mod services;
-mod utils;
+pub mod services;
+pub mod utils;
 
 use commands::AppState;
 

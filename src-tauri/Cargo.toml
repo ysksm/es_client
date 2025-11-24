@@ -1,9 +1,9 @@
 [package]
 name = "es_client"
-version = "0.1.0"
+version.workspace = true
 description = "Elasticsearch Index Management Application"
-authors = ["es_client team"]
-edition = "2024"
+authors.workspace = true
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -21,33 +21,33 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 
 # Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-toml = "0.8"
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
 
 # Async runtime
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true }
 
 # HTTP Client (for Elasticsearch REST API)
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
-url = "2.5"
+reqwest = { workspace = true }
+url = { workspace = true }
 
 # DuckDB
-duckdb = "1.1"
+duckdb = { workspace = true }
 
 # Encryption
-ring = "0.17"
-hex = "0.4"
-base64 = "0.22"
+ring = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
 
 # Error handling
-thiserror = "1"
+thiserror = { workspace = true }
 
 # Logging
-tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 # Utilities
-dirs = "5"
-chrono = { version = "0.4", features = ["serde"] }
+dirs = { workspace = true }
+chrono = { workspace = true }
 

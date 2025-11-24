@@ -1,0 +1,4 @@
+    Updating crates.io index
+error: no matching package named `es_client_lib` found
+location searched: /Users/kasamatsu/src/github/es_client/src-tauri
+required by package `es-client v0.1.0 (/Users/kasamatsu/src/github/es_client/cli)`
