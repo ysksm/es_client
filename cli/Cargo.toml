@@ -10,8 +10,8 @@ name = "es-client"
 path = "src/main.rs"
 
 [dependencies]
-# Shared library from Tauri backend
-es_client_lib = { path = "../src-tauri" }
+# Shared library from Tauri backend (package name is es_client, lib name is es_client_lib)
+es_client = { path = "../src-tauri" }
 
 # CLI framework
 clap = { workspace = true }

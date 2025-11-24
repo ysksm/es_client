@@ -353,7 +353,7 @@ async fn handle_index_command(cmd: IndexCommands) -> Result<(), Box<dyn std::err
                 println!("  Status: {}", "exists".green());
 
                 // Get document count
-                let count = client.count(&name, serde_json::json!({})).await?;
+                let count = client.count(&name).await?;
                 println!("  Documents: {}", count);
             } else {
                 println!("{} Index '{}' does not exist.", "✗".red(), name);
@@ -408,7 +408,7 @@ async fn handle_extract_command(
     // Create table and insert data
     print!("Saving to DuckDB table '{}'... ", output);
     duckdb_service.create_data_table(&output, &documents)?;
-    let inserted = duckdb_service.insert_data(output.clone(), documents)?;
+    let inserted = duckdb_service.insert_data(&output, documents)?;
     println!("{} {} records saved", "✓".green(), inserted);
 
     // Save extraction history
