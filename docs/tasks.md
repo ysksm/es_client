@@ -800,15 +800,29 @@ es-client db query --sql "SELECT COUNT(*) FROM logs_table"
   - `extract`: データ抽出とDuckDB保存
   - `db list/query/show/drop`: ローカルDB管理
 - **ライブラリ再利用:** src-tauriのmodels/services/utilsモジュールを公開して再利用
-- **README:** CLI使用方法とワークフロー例を記載
+- **包括的なREADME:**
+  - ビルド・インストール手順
+  - 10ステップの詳細な動作確認手順（期待される出力付き）
+  - 全コマンドの使用例とリファレンス
+  - 実用的なワークフロー例
+  - トラブルシューティングガイド
 
 **ファイル:**
 - `/Cargo.toml`: ワークスペース設定
-- `/cli/Cargo.toml`: CLIプロジェクト設定
-- `/cli/src/main.rs`: CLI実装（約600行）
-- `/cli/README.md`: CLI使用ガイド
+- `/cli/Cargo.toml`: CLIプロジェクト設定（依存関係修正済み）
+- `/cli/src/main.rs`: CLI実装（約600行、ビルドエラー修正済み）
+- `/cli/README.md`: CLI包括的使用ガイド（約400行）
 
-**コミット:** （次のコミット）
+**ビルド・テスト結果:**
+- ✅ `cargo check --workspace`: 成功
+- ✅ `cargo build --release -p es-client`: 成功
+- ✅ `./target/release/es-client --help`: 動作確認済み
+- ✅ 全コマンドのヘルプ表示確認
+
+**コミット:**
+1. feat: CLI実装を完成 & Milestone 1達成
+2. fix: CLIのビルドエラーを修正
+3. docs: CLIの包括的なREADMEを追加
 
 ---
 
