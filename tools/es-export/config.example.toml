@@ -1,0 +1,29 @@
+# Elasticsearch Export Tool Configuration
+
+[elasticsearch]
+# Elasticsearch host (without protocol)
+host = "localhost"
+# Elasticsearch port
+port = 9200
+# Authentication credentials
+username = "elastic"
+password = "your_password_here"
+# Use SSL/TLS (default: false)
+use_ssl = false
+# Verify SSL certificate (default: true)
+verify_certificate = true
+
+[query]
+# Index name or pattern
+index = "my-index"
+# Search query (Elasticsearch Query DSL)
+# Default: {"match_all": {}}
+query = { match_all = {} }
+# Maximum number of documents to fetch (default: 1000)
+size = 1000
+
+# Example with more complex query:
+# query = { bool = { must = [{ match = { status = "active" } }] } }
+
+# Example with date range:
+# query = { range = { "@timestamp" = { gte = "2024-01-01", lte = "2024-12-31" } } }
