@@ -248,7 +248,13 @@ impl ESClient {
     pub async fn test_connection(&self) -> Result<bool, Box<dyn std::error::Error>> {
         let url = format!("{}/", self.base_url);
         let response = self.client.get(&url).send().await?;
-        Ok(response.status().is_success())
+        let status = response.status();
+        if status.is_success() {
+            Ok(true)
+        } else {
+            let error_text = response.text().await.unwrap_or_default();
+            Err(format!("HTTP {}: {}", status.as_u16(), error_text).into())
+        }
     }
 
     /// Get cluster information

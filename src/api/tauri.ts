@@ -107,10 +107,9 @@ export const searchDocuments = async (
 
 export const countDocuments = async (
   profileName: string,
-  indexName: string,
-  query: SearchQuery
+  indexName: string
 ): Promise<number> => {
-  return invoke('count_documents', { profileName, indexName, query });
+  return invoke('count_documents', { profileName, indexName });
 };
 
 // Data Extraction

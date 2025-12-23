@@ -27,8 +27,7 @@ interface IndexStore {
   ) => Promise<void>;
   countDocuments: (
     profileName: string,
-    indexName: string,
-    query: SearchQuery
+    indexName: string
   ) => Promise<void>;
   setError: (error: string | null) => void;
 }
@@ -47,8 +46,9 @@ export const useIndexStore = create<IndexStore>((set, get) => ({
       const indices = await api.listIndices(profileName);
       set({ indices, isLoading: false });
     } catch (error) {
+      const errorMessage = typeof error === 'string' ? error : (error instanceof Error ? error.message : 'Failed to load indices');
       set({
-        error: error instanceof Error ? error.message : 'Failed to load indices',
+        error: errorMessage,
         isLoading: false
       });
     }
@@ -103,9 +103,9 @@ export const useIndexStore = create<IndexStore>((set, get) => ({
     }
   },
 
-  countDocuments: async (profileName, indexName, query) => {
+  countDocuments: async (profileName, indexName) => {
     try {
-      const count = await api.countDocuments(profileName, indexName, query);
+      const count = await api.countDocuments(profileName, indexName);
       set({ documentCount: count });
     } catch (error) {
       set({

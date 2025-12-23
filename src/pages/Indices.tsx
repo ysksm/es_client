@@ -48,7 +48,7 @@ export const Indices = () => {
     if (!currentProfile) return;
     selectIndex(indexName);
     try {
-      await countDocuments(currentProfile.name, indexName, {});
+      await countDocuments(currentProfile.name, indexName);
     } catch (error) {
       toast.error('ドキュメント数の取得に失敗しました');
     }

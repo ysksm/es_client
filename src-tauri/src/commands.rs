@@ -121,7 +121,7 @@ pub async fn save_app_config(
 
 // === Connection Commands ===
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn test_connection(
     state: State<'_, AppState>,
     profile_name: String,
@@ -149,7 +149,7 @@ pub async fn test_connection(
         .map_err(|e| format!("Connection test failed: {}", e))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn get_cluster_info(
     state: State<'_, AppState>,
     profile_name: String,
@@ -179,7 +179,7 @@ pub async fn get_cluster_info(
 
 // === Index Management Commands ===
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn list_indices(
     state: State<'_, AppState>,
     profile_name: String,
@@ -207,7 +207,7 @@ pub async fn list_indices(
         .map_err(|e| format!("Failed to list indices: {}", e))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn create_index(
     state: State<'_, AppState>,
     profile_name: String,
@@ -238,7 +238,7 @@ pub async fn create_index(
         .map_err(|e| format!("Failed to create index: {}", e))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn delete_index(
     state: State<'_, AppState>,
     profile_name: String,
@@ -267,7 +267,7 @@ pub async fn delete_index(
         .map_err(|e| format!("Failed to delete index: {}", e))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn index_exists(
     state: State<'_, AppState>,
     profile_name: String,
@@ -303,7 +303,7 @@ pub async fn list_sample_index_templates() -> Result<Vec<SampleIndexConfig>, Str
     Ok(SampleIndexConfig::all())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn create_sample_index(
     state: State<'_, AppState>,
     profile_name: String,
@@ -374,7 +374,7 @@ pub async fn create_sample_index(
     ))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn search_documents(
     state: State<'_, AppState>,
     profile_name: String,
@@ -404,7 +404,7 @@ pub async fn search_documents(
         .map_err(|e| format!("Search failed: {}", e))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn count_documents(
     state: State<'_, AppState>,
     profile_name: String,
@@ -435,7 +435,7 @@ pub async fn count_documents(
 
 // === Data Extraction Commands ===
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn extract_and_store_data(
     state: State<'_, AppState>,
     profile_name: String,
@@ -553,7 +553,7 @@ pub async fn get_extraction_history(state: State<'_, AppState>) -> Result<Vec<Ex
         .map_err(|e| format!("Failed to get extraction history: {}", e))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn query_extracted_data(
     state: State<'_, AppState>,
     table_name: String,
@@ -608,7 +608,7 @@ pub async fn list_tables(state: State<'_, AppState>) -> Result<Vec<String>, Stri
         .map_err(|e| format!("Failed to list tables: {}", e))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn export_to_parquet(
     state: State<'_, AppState>,
     table_name: String,
